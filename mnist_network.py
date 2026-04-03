@@ -25,7 +25,7 @@ class MyNetwork(nn.Module):
         self.pool1 = nn.MaxPool2d(2)
 
         # Conv layer with 20 5x5 filters
-        self.conv2 = nn.conv2d(10, 20, kernel_size=5)
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
 
         # Dropout layer with 0.5 dropout rate
         self.dropout = nn.Dropout(p=0.5)
@@ -101,6 +101,105 @@ def plot_first_six_test(test_loader):
     plt.show()
     print("Saved first six MNIST test samples!")
 
+# Train network for one epoch and return average loss
+def train_network(model, train_loader, optimizer, epoch):
+    # Initialize evaluation params
+    correct = 0
+    total = 0
+    total_loss = 0
+
+    # Set model to train mode
+    model.train()
+
+    for batch_idx, (data, target) in enumerate(train_loader):
+        # Clear gradients from prev step
+        optimizer.zero_grad()
+
+        # Run current batch through network
+        output = model(data)
+
+        # Compute negative log likelihood loss between predictions and true labels
+        loss = F.nll_loss(output, target)
+
+        # Backprop the loss to compute gradients
+        loss.backward()
+
+        # Update model weights using computed gradients
+        optimizer.step()
+
+        # Count up loss and correct predictions
+        total_loss += loss.item()
+        pred = output.argmax(dim=1) # Prediction is the index of the highest log-prob
+        correct += pred.eq(target).sum().item()
+        total += len(data)
+
+        # Print progress every 200 batches
+        if batch_idx % 200 == 0:
+            print(f'  Epoch {epoch} [{batch_idx * len(data)}/{len(train_loader.dataset)}] '
+                  f'Loss: {loss.item():.4f}')
+
+    # Average loss over all batches
+    avg_loss = total_loss / len(train_loader)
+    accuracy = 100.0 * correct / total
+
+    return avg_loss, accuracy
+
+# Evaluate network on data loader and return average loss and accuracy
+def evaluate_network(model, loader):
+    # Set model to eval mode to disable dropout so output is deterministic
+    model.eval()
+    total_loss = 0
+    correct = 0
+
+    # Disable gradient computation since no training
+    with torch.no_grad():
+        for data, target in loader:
+            output = model(data)
+
+            # Sum loss across all examples
+            total_loss += F.nll_loss(output, target, reduction='sum').item()
+            pred = output.argmax(dim=1)
+            correct += pred.eq(target).sum().item()
+
+    # Divide by total number of examples to get average loss per sample
+    avg_loss = total_loss / len(loader.dataset)
+    accuracy = 100.0 * correct / len(loader.dataset)
+
+    return avg_loss, accuracy
+
+
+# Plot training and testing loss and accuracy curves
+def plot_training_curves(train_losses, test_losses, train_accuracies, test_accuracies):
+    # Build list of epoch numbers for x-axis
+    epochs = range(1, len(train_losses) + 1)
+
+    # Create two side-by-side plots with one for loss, one for accuracy
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+    # Configure loss plot (blue for training and red for test)
+    ax1.plot(epochs, train_losses, 'b-o', label='Training Loss')
+    ax1.plot(epochs, test_losses, 'r-o', label='Test Loss')
+    ax1.set_title('Training and Test Loss')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.legend()
+    ax1.grid(True)
+
+    # Configure accuracy plot (blue for training and red for test)
+    ax2.plot(epochs, train_accuracies, 'b-o', label='Training Accuracy')
+    ax2.plot(epochs, test_accuracies, 'r-o', label='Test Accuracy')
+    ax2.set_title('Training and Test Accuracy')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Accuracy (%)')
+    ax2.legend()
+    ax2.grid(True)
+
+    plt.suptitle('MNIST CNN Training Progress')
+    plt.tight_layout()
+    plt.savefig('training_curves.png', dpi=150)
+    plt.show()
+    print("Saved training_curves.png")
+
 """
 Main function:
     Used to plot first six test digits, training model, compute average loss and accuracy of model,
@@ -111,12 +210,52 @@ def main(argv):
     batch_size = int(argv[1]) if len(argv) > 1 else 64
     num_epochs = int(argv[2]) if len(argv) > 2 else 5
 
+    print(f"Using batch size of {batch_size} and {num_epochs} epochs")
+
+    learning_rate = 0.01
+    momentum = 0.5
+    saved_model_path = 'mnist_model.pth'
+
     # Load training and test data
     train_loader, test_loader = load_data(batch_size)
     print("Train and test data loaded!")
 
     # Plot first six test digits
     plot_first_six_test(test_loader)
+
+    # Instantiate the network and SGD optimizer
+    model = MyNetwork()
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+
+    # Init lists to track metrics across epochs for plotting
+    train_losses, test_losses = [], []
+    train_accuracies, test_accuracies = [], []
+
+    for epoch in range(1, num_epochs + 1):
+        print(f"Epoch: {epoch}")
+
+        # Train for one full pass through training set
+        train_loss, train_accuracy = train_network(model, train_loader, optimizer, epoch)
+
+        # Evaluate on both sets after each epoch
+        test_loss, test_accuracy = evaluate_network(model, test_loader)
+
+        # Store results for plotting
+        train_losses.append(train_loss)
+        test_losses.append(test_loss)
+        train_accuracies.append(train_accuracy)
+        test_accuracies.append(test_accuracy)
+
+        print(f"Train Loss: {train_loss:.4f} | Train Accuracy: {train_accuracy:.2f}%")
+        print(f"Test Loss: {test_loss:.4f} | Test Accuracy: {test_accuracy:.2f}%")
+
+    # Plot and save the training curves
+    plot_training_curves(train_losses, test_losses, train_accuracies, test_accuracies)
+
+    # Save the trained model weights to disk for use in test_network.py and custom_digits.py
+    torch.save(model.state_dict(), saved_model_path)
+    print(f"\nModel saved to '{saved_model_path}'")
+
 
     return
 
