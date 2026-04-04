@@ -2,6 +2,7 @@
 Aafi Mansuri, Terry Zhen
 Apr 2026
 CS 5330 - Project 5: Recognition using Deep Networks
+
 Build, train, and save CNN for MNIST digit recognition
 """
 
