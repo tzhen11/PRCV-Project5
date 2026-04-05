@@ -1,4 +1,3 @@
-
 """
 Aafi Mansuri, Terry Zhen
 Apr 2026
@@ -20,6 +19,7 @@ import matplotlib.pyplot as plt
 from mnist_network import MyNetwork
 from test_network import load_model
 
+
 class GreekTransform:
     def __init__(self) -> None:
         pass
@@ -27,18 +27,22 @@ class GreekTransform:
     def __call__(self, x):
         x = TF.rgb_to_grayscale(x)
         x = TF.affine(x, 0, [0, 0], 36/128, [0.0])
-        x = TF.center_crop(x,(28,28))
+        x = TF.center_crop(x, (28, 28))
         return TF.invert(x)
-    
-def load_greek_data(training_set_path, batch_size = 5):
+
+
+def load_greek_data(training_set_path, batch_size=5):
+    transform_list = [torchvision.transforms.ToTensor()]
+
+    transform_list += [
+        GreekTransform(),
+        torchvision.transforms.Normalize((0.1307,), (0.3081,))
+    ]
+
     greek_train = DataLoader(
         torchvision.datasets.ImageFolder(
             training_set_path,
-            transform=torchvision.transforms.Compose([
-                torchvision.transforms.ToTensor(),
-                GreekTransform(),
-                torchvision.transforms.Normalize((0.1307,), (0.3081,))
-            ])
+            transform=torchvision.transforms.Compose(transform_list)
         ),
         batch_size=batch_size,
         shuffle=True
@@ -47,16 +51,20 @@ def load_greek_data(training_set_path, batch_size = 5):
     return greek_train
 
 
-def prepare_transfer_model(model_path):
+def prepare_transfer_model(model_path, num_classes=3):
     # Load pretrained MNIST model
     model = load_model(model_path)
 
     # Freeze all layers so pretrained weights don't change
     for param in model.parameters():
         param.requires_grad = False
-    
+
+    # Unfreeze fc1
+    for param in model.fc1.parameters():
+        param.requires_grad = True
+
     # Replace last layer
-    model.fc2 = nn.Linear(50,3)
+    model.fc2 = nn.Linear(50, num_classes)
 
     print("Modified network for Greek letter classification:")
     print(model)
@@ -89,9 +97,10 @@ def train_epoch(model, train_loader, optimizer, epoch):
 
     return avg_loss, accuracy
 
-# Plot training loss and accuract over epochs
+
+# Plot training loss and accuracy over epochs
 def plot_training_curves(losses, accuracies):
-    epochs = range(1,len(losses) + 1)
+    epochs = range(1, len(losses) + 1)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
@@ -117,52 +126,42 @@ def plot_training_curves(losses, accuracies):
 def main(argv):
     model_path = argv[1] if len(argv) > 1 else 'mnist_model.pth'
     data_path = argv[2] if len(argv) > 2 else 'greek_train'
-    num_epochs = int(argv[3]) if len(argv) > 3 else 50
+    num_epochs = int(argv[3]) if len(argv) > 3 else 100
 
     print(f"Training for {num_epochs} epochs")
 
+    # Detect number of classes from subfolder count
+    import os
+    num_classes = len([d for d in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, d))])
+    print(f"Detected {num_classes} classes")
+
     train_loader = load_greek_data(data_path)
-    model = prepare_transfer_model(model_path)
-    optimizer = torch.optim.SGD(model.fc2.parameters(), lr=0.05, momentum=0.9)
-
-    # dataset = train_loader.dataset
-    # print(f"Classes: {dataset.classes}")
-    # print(f"Total images: {len(dataset)}")
-    # print(f"Class to idx: {dataset.class_to_idx}")
-
-    # fig, axes = plt.subplots(1, 9, figsize=(18, 2))
-    # for i in range(9):
-    #     img, label = dataset[i * 3]
-    #     axes[i].imshow(img[0], cmap='gray')
-    #     axes[i].set_title(f"{dataset.classes[label]}")
-    #     axes[i].axis('off')
-    # plt.suptitle("Transformed Greek Letters")
-    # plt.tight_layout()
-    # plt.show()
+    model = prepare_transfer_model(model_path, num_classes=num_classes)
+    optimizer = torch.optim.SGD(model.fc2.parameters(), lr=0.01, momentum=0.9)
 
     losses = []
     accuracies = []
 
     for epoch in range(1, num_epochs + 1):
-        loss, accuracy = train_epoch(model, train_loader,optimizer,epoch)
+        loss, accuracy = train_epoch(model, train_loader, optimizer, epoch)
         losses.append(loss)
         accuracies.append(accuracy)
 
         if epoch % 10 == 0 or accuracy == 100.0:
             print(f"Epoch {epoch}: Loss = {loss:.4f} | Accuracy = {accuracy:.1f}%")
-        
-        # stop early
+
+        # Stop early
         if accuracy == 100.0:
             print(f"Reached 100% accuracy at epoch {epoch}")
             break
 
-    plot_training_curves(losses,accuracies)
+    plot_training_curves(losses, accuracies)
 
     torch.save(model.state_dict(), 'greek_model.pth')
     print("Model saved to 'greek_model.pth'")
 
     return
 
+
 if __name__ == "__main__":
     main(sys.argv)
-

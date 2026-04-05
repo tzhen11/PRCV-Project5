@@ -20,7 +20,7 @@ from test_network import load_model
 
 
 # Class label mapping
-CLASS_NAMES = ['alpha', 'beta', 'gamma']
+CLASS_NAMES = ['alpha', 'beta', 'delta', 'gamma', 'lambda', 'theta']
 
 
 # Load Greek letter model with modified last layer
@@ -28,7 +28,7 @@ def load_greek_model(model_path):
     model = MyNetwork()
 
     # Replace last layer to match Greek model structure (3 classes instead of 10)
-    model.fc2 = nn.Linear(50, 3)
+    model.fc2 = nn.Linear(50, 6)
 
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
@@ -137,8 +137,9 @@ def test_and_display(model, image_paths, labels, save_path):
         else:
             ax.axis('off')
 
-    plt.suptitle('Custom Greek Letter Classification\n(green = correct, red = incorrect)', fontsize=14)
+    plt.suptitle('Custom Greek Letter Classification\n(green = correct, red = incorrect)', fontsize=14, y=1.02)
     plt.tight_layout()
+    plt.subplots_adjust(hspace=0.5)
     plt.savefig(save_path, dpi=150)
     plt.show()
     print(f"Saved {save_path}")
@@ -154,6 +155,7 @@ def main(argv):
         sys.exit(1)
 
     model = load_greek_model(model_path)
+    print(model)
 
     image_paths, labels = load_images(image_dir)
 
