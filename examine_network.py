@@ -35,6 +35,7 @@ def get_first_layer_weights(model):
     # Print each of the 10 filters
     for i in range(10):
         print(f"Filter {i+1}:")
+        print(f"Shape: {weights[i, 0].shape}")
         print(weights[i, 0])
         print()
 
